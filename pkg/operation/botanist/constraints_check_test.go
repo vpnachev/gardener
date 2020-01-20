@@ -22,8 +22,10 @@ import (
 	. "github.com/onsi/gomega"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook"
+	"k8s.io/apiserver/pkg/admission/plugin/webhook/mutating"
 )
 
 var _ = Describe("constraints checks", func() {
@@ -32,6 +34,8 @@ var _ = Describe("constraints checks", func() {
 			failurePolicy *admissionregistrationv1beta1.FailurePolicyType
 			operationType admissionregistrationv1beta1.OperationType
 			groupResource schema.GroupResource
+			objectMeta    metav1.ObjectMeta
+			meta          metav1.TypeMeta
 		}
 
 		var (
@@ -43,6 +47,29 @@ var _ = Describe("constraints checks", func() {
 			operationAll    = admissionregistrationv1beta1.OperationAll
 			operationDelete = admissionregistrationv1beta1.Delete
 
+			originGardenerObjectMeta = metav1.ObjectMeta{
+				Labels: map[string]string{
+					"origin": "gardener",
+				},
+			}
+
+			originNonGardenerObjectMeta = metav1.ObjectMeta{
+				Labels: map[string]string{
+					"my": "app",
+				},
+			}
+
+			pod = corev1.Pod{
+				ObjectMeta: originGardenerObjectMeta,
+			}
+			// deploy = appsv1.Deployment{
+			// 	ObjectMeta: originGardenerObjectMeta,
+			// }
+			// ds = appsv1.DaemonSet{
+			// 	ObjectMeta: originGardenerObjectMeta,
+			// }
+			// nodes = corev1.Node{}
+
 			groupResourcePods  = corev1.Resource("pods")
 			groupResourceNodes = corev1.Resource("nodes")
 			groupResourceOther = corev1.Resource("other")
@@ -51,6 +78,8 @@ var _ = Describe("constraints checks", func() {
 				failurePolicy: &failurePolicyFail,
 				operationType: operationCreate,
 				groupResource: groupResourcePods,
+				objectMeta:    originGardenerObjectMeta,
+				meta:          pod.TypeMeta,
 			}
 		)
 
@@ -70,17 +99,37 @@ var _ = Describe("constraints checks", func() {
 							},
 						},
 					}
-					accessor = webhook.NewMutatingWebhookAccessor("test-uid", "test-cfg", &w)
+					accessor          = webhook.NewMutatingWebhookAccessor("test-uid", "test-cfg", &w)
+					mutatingPlugin, _ = mutating.NewMutatingWebhook(nil)
 				)
-
-				isProblematic := botanist.IsProblematicWebhook(accessor)
+				isProblematic := botanist.IsProblematicWebhook(accessor, mutatingPlugin.Webhook)
 				Expect(isProblematic).To(Equal(expected))
 			},
 			Entry("Problematic Webhook for CREATE pods",
 				problematicWebhookTestCase,
 				true,
 			),
-			Entry("Problematic Webhook with failurePolicy nil for CREATE pods",
+			Entry("Non-Problematic Webhook for CREATE pods",
+				webhookTestCase{
+					failurePolicy: &failurePolicyFail,
+					operationType: operationCreate,
+					groupResource: groupResourcePods,
+					objectMeta:    originNonGardenerObjectMeta,
+					meta:          pod.TypeMeta,
+				},
+				false,
+			),
+			Entry("Problematic Webhook for CREATE pods",
+				webhookTestCase{
+					failurePolicy: &failurePolicyFail,
+					operationType: operationCreate,
+					groupResource: groupResourcePods,
+					objectMeta:    originGardenerObjectMeta,
+					meta:          pod.TypeMeta,
+				},
+				true,
+			),
+			Entry("Unproblematic Webhook with failurePolicy nil for CREATE pods",
 				webhookTestCase{
 					failurePolicy: nil,
 					operationType: problematicWebhookTestCase.operationType,
