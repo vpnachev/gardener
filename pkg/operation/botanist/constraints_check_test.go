@@ -31,11 +31,10 @@ import (
 var _ = Describe("constraints checks", func() {
 	Context("HibernationPossible", func() {
 		type webhookTestCase struct {
-			failurePolicy *admissionregistrationv1beta1.FailurePolicyType
-			operationType admissionregistrationv1beta1.OperationType
-			groupResource schema.GroupResource
-			objectMeta    metav1.ObjectMeta
-			meta          metav1.TypeMeta
+			failurePolicy  *admissionregistrationv1beta1.FailurePolicyType
+			operationType  admissionregistrationv1beta1.OperationType
+			groupResource  schema.GroupResource
+			objectSelector *metav1.LabelSelector
 		}
 
 		var (
@@ -47,39 +46,26 @@ var _ = Describe("constraints checks", func() {
 			operationAll    = admissionregistrationv1beta1.OperationAll
 			operationDelete = admissionregistrationv1beta1.Delete
 
-			originGardenerObjectMeta = metav1.ObjectMeta{
-				Labels: map[string]string{
+			originGardenerSelector = metav1.LabelSelector{
+				MatchLabels: map[string]string{
 					"origin": "gardener",
 				},
 			}
-
-			originNonGardenerObjectMeta = metav1.ObjectMeta{
-				Labels: map[string]string{
+			nonOriginGardenerSelector = metav1.LabelSelector{
+				MatchLabels: map[string]string{
 					"my": "app",
 				},
 			}
-
-			pod = corev1.Pod{
-				ObjectMeta: originGardenerObjectMeta,
-			}
-			// deploy = appsv1.Deployment{
-			// 	ObjectMeta: originGardenerObjectMeta,
-			// }
-			// ds = appsv1.DaemonSet{
-			// 	ObjectMeta: originGardenerObjectMeta,
-			// }
-			// nodes = corev1.Node{}
 
 			groupResourcePods  = corev1.Resource("pods")
 			groupResourceNodes = corev1.Resource("nodes")
 			groupResourceOther = corev1.Resource("other")
 
 			problematicWebhookTestCase = webhookTestCase{
-				failurePolicy: &failurePolicyFail,
-				operationType: operationCreate,
-				groupResource: groupResourcePods,
-				objectMeta:    originGardenerObjectMeta,
-				meta:          pod.TypeMeta,
+				failurePolicy:  &failurePolicyFail,
+				operationType:  operationCreate,
+				groupResource:  groupResourcePods,
+				objectSelector: &metav1.LabelSelector{},
 			}
 		)
 
@@ -87,8 +73,9 @@ var _ = Describe("constraints checks", func() {
 			func(testCase webhookTestCase, expected bool) {
 				var (
 					w = admissionregistrationv1beta1.MutatingWebhook{
-						Name:          "foo-webhook",
-						FailurePolicy: testCase.failurePolicy,
+						Name:           "foo-webhook",
+						FailurePolicy:  testCase.failurePolicy,
+						ObjectSelector: testCase.objectSelector,
 						Rules: []admissionregistrationv1beta1.RuleWithOperations{
 							{
 								Operations: []admissionregistrationv1beta1.OperationType{testCase.operationType},
@@ -109,39 +96,21 @@ var _ = Describe("constraints checks", func() {
 				problematicWebhookTestCase,
 				true,
 			),
-			Entry("Non-Problematic Webhook for CREATE pods",
+			Entry("Unproblematic Webhook with failurePolicy nil for CREATE pods",
 				webhookTestCase{
-					failurePolicy: &failurePolicyFail,
-					operationType: operationCreate,
-					groupResource: groupResourcePods,
-					objectMeta:    originNonGardenerObjectMeta,
-					meta:          pod.TypeMeta,
+					failurePolicy:  nil,
+					operationType:  problematicWebhookTestCase.operationType,
+					groupResource:  problematicWebhookTestCase.groupResource,
+					objectSelector: &nonOriginGardenerSelector,
 				},
 				false,
 			),
-			Entry("Problematic Webhook for CREATE pods",
-				webhookTestCase{
-					failurePolicy: &failurePolicyFail,
-					operationType: operationCreate,
-					groupResource: groupResourcePods,
-					objectMeta:    originGardenerObjectMeta,
-					meta:          pod.TypeMeta,
-				},
-				true,
-			),
-			Entry("Unproblematic Webhook with failurePolicy nil for CREATE pods",
-				webhookTestCase{
-					failurePolicy: nil,
-					operationType: problematicWebhookTestCase.operationType,
-					groupResource: problematicWebhookTestCase.groupResource,
-				},
-				true,
-			),
 			Entry("Problematic Webhook for UPDATE pods",
 				webhookTestCase{
-					failurePolicy: problematicWebhookTestCase.failurePolicy,
-					operationType: operationUpdate,
-					groupResource: problematicWebhookTestCase.groupResource,
+					failurePolicy:  &failurePolicyFail,
+					operationType:  operationUpdate,
+					groupResource:  groupResourcePods,
+					objectSelector: &originGardenerSelector,
 				},
 				true,
 			),
@@ -198,6 +167,25 @@ var _ = Describe("constraints checks", func() {
 					failurePolicy: problematicWebhookTestCase.failurePolicy,
 					operationType: problematicWebhookTestCase.operationType,
 					groupResource: groupResourceOther,
+				},
+				false,
+			),
+			Entry("Unproblematic Webhook because of resource 'other'",
+				webhookTestCase{
+					failurePolicy:  problematicWebhookTestCase.failurePolicy,
+					operationType:  problematicWebhookTestCase.operationType,
+					groupResource:  groupResourcePods,
+					objectSelector: &nonOriginGardenerSelector,
+				},
+				false,
+			),
+
+			Entry("Problematic Webhook because of resource 'other'",
+				webhookTestCase{
+					failurePolicy:  problematicWebhookTestCase.failurePolicy,
+					operationType:  problematicWebhookTestCase.operationType,
+					groupResource:  groupResourcePods,
+					objectSelector: &originGardenerSelector,
 				},
 				false,
 			),
