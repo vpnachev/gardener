@@ -17,6 +17,7 @@ package botanist_test
 import (
 	"github.com/gardener/gardener/pkg/operation/botanist"
 
+	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -31,10 +32,11 @@ import (
 var _ = Describe("constraints checks", func() {
 	Context("HibernationPossible", func() {
 		type webhookTestCase struct {
-			failurePolicy  *admissionregistrationv1beta1.FailurePolicyType
-			operationType  admissionregistrationv1beta1.OperationType
-			groupResource  schema.GroupResource
-			objectSelector *metav1.LabelSelector
+			failurePolicy     *admissionregistrationv1beta1.FailurePolicyType
+			operationType     admissionregistrationv1beta1.OperationType
+			groupResource     schema.GroupResource
+			objectSelector    *metav1.LabelSelector
+			namespaceSelector *metav1.LabelSelector
 		}
 
 		var (
@@ -51,9 +53,15 @@ var _ = Describe("constraints checks", func() {
 					"origin": "gardener",
 				},
 			}
-			nonOriginGardenerSelector = metav1.LabelSelector{
+			myAppSelector = metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"my": "app",
+				},
+			}
+			kubeSystemNamespaceSelector = metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"gardener.cloud/purpose": "kube-system",
+					"role":                   "kube-system",
 				},
 			}
 
@@ -62,10 +70,11 @@ var _ = Describe("constraints checks", func() {
 			groupResourceOther = corev1.Resource("other")
 
 			problematicWebhookTestCase = webhookTestCase{
-				failurePolicy:  &failurePolicyFail,
-				operationType:  operationCreate,
-				groupResource:  groupResourcePods,
-				objectSelector: &metav1.LabelSelector{},
+				failurePolicy:     &failurePolicyFail,
+				operationType:     operationCreate,
+				groupResource:     groupResourcePods,
+				objectSelector:    &metav1.LabelSelector{},
+				namespaceSelector: &kubeSystemNamespaceSelector,
 			}
 		)
 
@@ -80,11 +89,13 @@ var _ = Describe("constraints checks", func() {
 							{
 								Operations: []admissionregistrationv1beta1.OperationType{testCase.operationType},
 								Rule: admissionregistrationv1beta1.Rule{
-									APIGroups: []string{testCase.groupResource.Group},
-									Resources: []string{testCase.groupResource.Resource},
+									APIGroups:   []string{testCase.groupResource.Group},
+									Resources:   []string{testCase.groupResource.Resource},
+									APIVersions: []string{"*"},
 								},
 							},
 						},
+						NamespaceSelector: testCase.namespaceSelector,
 					}
 					accessor          = webhook.NewMutatingWebhookAccessor("test-uid", "test-cfg", &w)
 					mutatingPlugin, _ = mutating.NewMutatingWebhook(nil)
@@ -101,7 +112,7 @@ var _ = Describe("constraints checks", func() {
 					failurePolicy:  nil,
 					operationType:  problematicWebhookTestCase.operationType,
 					groupResource:  problematicWebhookTestCase.groupResource,
-					objectSelector: &nonOriginGardenerSelector,
+					objectSelector: &myAppSelector,
 				},
 				false,
 			),
@@ -175,7 +186,7 @@ var _ = Describe("constraints checks", func() {
 					failurePolicy:  problematicWebhookTestCase.failurePolicy,
 					operationType:  problematicWebhookTestCase.operationType,
 					groupResource:  groupResourcePods,
-					objectSelector: &nonOriginGardenerSelector,
+					objectSelector: &myAppSelector,
 				},
 				false,
 			),
@@ -192,3 +203,9 @@ var _ = Describe("constraints checks", func() {
 		)
 	})
 })
+
+func constNamespaceLister(Namespaces []*corev1.Namespace) kutil.NamespaceLister {
+	return kutil.NewNamespaceLister(func() ([]*corev1.Namespace, error) {
+		return namespaces, nil
+	})
+}

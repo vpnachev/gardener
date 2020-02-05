@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8s "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
@@ -83,5 +84,44 @@ func TryUpdateNamespaceLabels(k k8s.Interface, backoff wait.Backoff, meta metav1
 		return k.CoreV1().Namespaces().Update(namespace)
 	}, func(cur, updated *corev1.Namespace) bool {
 		return equality.Semantic.DeepEqual(cur.Labels, updated.Labels)
+	})
+}
+
+// NamespaceSource is a function that produces a slice of Namespaces or an error.
+type NamespaceSource func() ([]*corev1.Namespace, error)
+
+// NamespaceLister is a lister of Namespaces.
+type NamespaceLister interface {
+	// List lists all Namespaces that match the given selector.
+	List(selector labels.Selector) ([]*corev1.Namespace, error)
+}
+
+type namespaceLister struct {
+	source NamespaceSource
+}
+
+// NewNamespaceLister creates a new NamespaceLister from the given NamespaceSource.
+func NewNamespaceLister(source NamespaceSource) NamespaceLister {
+	return &namespaceLister{source: source}
+}
+
+func filterNamespaces(source NamespaceSource, filter func(*corev1.Namespace) bool) ([]*corev1.Namespace, error) {
+	namespaces, err := source()
+	if err != nil {
+		return nil, err
+	}
+
+	var out []*corev1.Namespace
+	for _, namespace := range namespaces {
+		if filter(namespace) {
+			out = append(out, namespace)
+		}
+	}
+	return out, nil
+}
+
+func (d *namespaceLister) List(selector labels.Selector) ([]*corev1.Namespace, error) {
+	return filterNamespaces(d.source, func(namespace *corev1.Namespace) bool {
+		return selector.Matches(labels.Set(namespace.Labels))
 	})
 }

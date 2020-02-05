@@ -124,8 +124,9 @@ func (b *Botanist) CheckHibernationPossible(ctx context.Context, constraint gard
 }
 
 // IsProblematicWebhook checks if a single webhook of the Shoot Cluster is problematic and the Shoot should therefore
-// not be hibernated. Problematic webhooks are webhooks with rules affecting CREATE|UPDATE if pods|deployments|daemonsts|nodes and
-// failurePolicy=Fail. If the Shoot contains such a webhook, we can never wake up this shoot cluster again
+// not be hibernated. Problematic webhooks are webhooks with rules affecting CREATE|UPDATE of pods|deployments|daemonsts|nodes
+// in kube-system namespace and failurePolicy=Fail.
+// If the Shoot contains such a webhook, we can never wake up this shoot cluster again
 // as new nodes cannot get created/ready, or our system component pods cannot get created/ready
 // (because the webhook's backing pod is not yet running).
 func IsProblematicWebhook(accessor webhook.WebhookAccessor, webhook *genericwebhook.Webhook) bool {
@@ -133,35 +134,55 @@ func IsProblematicWebhook(accessor webhook.WebhookAccessor, webhook *genericwebh
 	if failurePolicy == nil || *failurePolicy == admissionregistrationv1beta1.Ignore {
 		return false
 	}
+	webhook.SetExternalKubeInformerFactory()
 
 	objectMeta := metav1.ObjectMeta{
 		Labels: map[string]string{
 			"origin": "gardener",
 		},
+		Namespace: "kube-system",
 	}
+
 	po := corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
 		ObjectMeta: objectMeta,
 	}
 	deploy := appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: objectMeta,
 	}
 	ds := appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DaemonSet",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: objectMeta,
 	}
-	nodes := corev1.Node{}
+	nodes := corev1.Node{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Node",
+			APIVersion: "v1",
+		},
+	}
 	interfaces := &admission.RuntimeObjectInterfaces{EquivalentResourceMapper: nil}
 
-	createPods := admission.NewAttributesRecord(&po, nil, schema.GroupVersionKind{"", "v1", "Pod"}, "kube-system", "name", schema.GroupVersionResource{"", "v1", "pods"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
-	updatePods := admission.NewAttributesRecord(&po, nil, schema.GroupVersionKind{"", "v1", "Pod"}, "kube-system", "name", schema.GroupVersionResource{"", "v1", "pods"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
+	createPods := admission.NewAttributesRecord(&po, nil, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, "kube-system", "name", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
+	updatePods := admission.NewAttributesRecord(&po, nil, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}, "kube-system", "name", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
 
-	createDeploys := admission.NewAttributesRecord(&deploy, nil, schema.GroupVersionKind{"apps", "v1", "Deployment"}, "kube-system", "name", schema.GroupVersionResource{"apps", "v1", "deployments"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
-	updateDeploys := admission.NewAttributesRecord(&deploy, nil, schema.GroupVersionKind{"apps", "v1", "Deployment"}, "kube-system", "name", schema.GroupVersionResource{"apps", "v1", "deployments"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
+	createDeploys := admission.NewAttributesRecord(&deploy, nil, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, "kube-system", "name", schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
+	updateDeploys := admission.NewAttributesRecord(&deploy, nil, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}, "kube-system", "name", schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
 
-	createDSs := admission.NewAttributesRecord(&ds, nil, schema.GroupVersionKind{"apps", "v1", "DaemonSet"}, "kube-system", "name", schema.GroupVersionResource{"apps", "v1", "daemonsets"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
-	updateDSs := admission.NewAttributesRecord(&ds, nil, schema.GroupVersionKind{"apps", "v1", "DaemonSet"}, "kube-system", "name", schema.GroupVersionResource{"apps", "v1", "daemonsets"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
+	createDSs := admission.NewAttributesRecord(&ds, nil, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "DaemonSet"}, "kube-system", "name", schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
+	updateDSs := admission.NewAttributesRecord(&ds, nil, schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "DaemonSet"}, "kube-system", "name", schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
 
-	createNodes := admission.NewAttributesRecord(&nodes, nil, schema.GroupVersionKind{"", "v1", "Node"}, "kube-system", "name", schema.GroupVersionResource{"", "v1", "nodes"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
-	updateNodes := admission.NewAttributesRecord(&nodes, nil, schema.GroupVersionKind{"", "v1", "Node"}, "kube-system", "name", schema.GroupVersionResource{"", "v1", "nodes"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
+	createNodes := admission.NewAttributesRecord(&nodes, nil, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}, "kube-system", "name", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}, "", admission.Create, &metav1.CreateOptions{}, false, nil)
+	updateNodes := admission.NewAttributesRecord(&nodes, nil, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}, "kube-system", "name", schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}, "", admission.Update, &metav1.UpdateOptions{}, false, nil)
 
 	invocation, apiErrors := webhook.ShouldCallHook(accessor, createPods, interfaces)
 	if apiErrors != nil || invocation != nil {
