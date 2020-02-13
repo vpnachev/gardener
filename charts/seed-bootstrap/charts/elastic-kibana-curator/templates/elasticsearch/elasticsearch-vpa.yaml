@@ -9,4 +9,4 @@ spec:
     kind: StatefulSet
     name: elasticsearch-logging
   updatePolicy:
-    updateMode: "Off"
+    updateMode: "Auto"

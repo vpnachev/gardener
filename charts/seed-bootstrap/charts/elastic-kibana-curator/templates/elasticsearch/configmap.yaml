@@ -60,7 +60,7 @@ data:
               # this is the threshold to move shard to other node
               # (which we don't have in single node mode so put it to 100%)
               high : ${DISK_WATERMARK_HIGHT:90%}
-              #The low watermark defines the disk usage point beyond which ES 
+              #The low watermark defines the disk usage point beyond which ES
               # won’t allocate new shards to that node.
               low: ${DISK_WATERMARK_LOW:85%}
               #threshold for read only lock
@@ -126,8 +126,9 @@ data:
     # Xms represents the initial size of total heap space
     # Xmx represents the maximum size of total heap space
 
-    -Xms1280M
-    -Xmx1280M
+    -XX:MaxRAMPercentage=50.0
+    -XX:MinRAMPercentage=50.0
+    -XX:InitialRAMPercentage=50.0
 
     ################################################################
     ## Expert settings
@@ -222,8 +223,8 @@ data:
 
     -Des.enforce.bootstrap.checks=true
 
-    # Returning default values for missing document values is deprecated. 
-    # Set system property '-Des.scripting.exception_for_missing_value=true' 
+    # Returning default values for missing document values is deprecated.
+    # Set system property '-Des.scripting.exception_for_missing_value=true'
     # to make behaviour compatible with future major versions.
     -Des.scripting.exception_for_missing_value=true
 

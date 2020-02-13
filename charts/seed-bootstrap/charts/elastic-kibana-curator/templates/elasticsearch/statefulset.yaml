@@ -43,8 +43,6 @@ spec:
 {{- end }}
         imagePullPolicy: IfNotPresent
         env:
-        - name: ES_JAVA_OPTS
-          value: "-Xms{{ include "jvm.memory" .Values.elasticsearch }} -Xmx{{ include "jvm.memory" .Values.elasticsearch }}"
         - name: CLUSTER_NAME
           value: {{ .Release.Namespace }}-elasticsearch-logging
         - name: WRITE_QUEUE_SIZE
