@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gardener/gardener/extensions/pkg/controller"
+	"github.com/gardener/gardener/extensions/pkg/controller/infrastructure"
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	gardencorev1beta1helper "github.com/gardener/gardener/pkg/apis/core/v1beta1/helper"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
@@ -156,6 +158,9 @@ func (t *terraformer) execute(ctx context.Context, scriptName string) error {
 			t.logger.Debugf("All ConfigMaps/Secrets do not exist, can not execute the Terraform %s Pod.", scriptName)
 			return retry.Ok()
 		} else if numberOfExistingResources == numberOfConfigResources {
+			if err := t.ensureFinalizer(ctx); err != nil {
+				return retry.MinorError(fmt.Errorf("failed to ensure finalizers on the ConfigMaps/Secrets, err: %+v", err))
+			}
 			t.logger.Debugf("All ConfigMaps/Secrets exist, will execute the Terraform %s Pod.", scriptName)
 			execute = true
 			return retry.Ok()
@@ -226,6 +231,10 @@ func (t *terraformer) execute(ctx context.Context, scriptName string) error {
 		}
 		return gardencorev1beta1helper.DetermineError(errors.New(errorMessage), errorMessage)
 	}
+
+	if scriptName == "destroy" {
+		return t.deleteFinalizer(ctx)
+	}
 	return nil
 }
 
@@ -240,6 +249,56 @@ func (t *terraformer) createOrUpdateServiceAccount(ctx context.Context) error {
 		return nil
 	})
 	return err
+}
+
+func (t *terraformer) ensureFinalizer(ctx context.Context) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.variablesName,
+			Namespace: t.namespace,
+		},
+	}
+	if err := controller.EnsureFinalizer(ctx, t.client, infrastructure.FinalizerName, &secret); err != nil {
+		return err
+	}
+
+	config := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.stateName,
+			Namespace: t.namespace,
+		},
+	}
+
+	if err := controller.EnsureFinalizer(ctx, t.client, infrastructure.FinalizerName, &config); err != nil {
+		return err
+	}
+	config.Name = t.configName
+	return controller.EnsureFinalizer(ctx, t.client, infrastructure.FinalizerName, &config)
+}
+
+func (t *terraformer) deleteFinalizer(ctx context.Context) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.variablesName,
+			Namespace: t.namespace,
+		},
+	}
+	if err := controller.DeleteFinalizer(ctx, t.client, infrastructure.FinalizerName, &secret); err != nil {
+		return err
+	}
+
+	config := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      t.stateName,
+			Namespace: t.namespace,
+		},
+	}
+
+	if err := controller.DeleteFinalizer(ctx, t.client, infrastructure.FinalizerName, &config); err != nil {
+		return err
+	}
+	config.Name = t.configName
+	return controller.DeleteFinalizer(ctx, t.client, infrastructure.FinalizerName, &config)
 }
 
 func (t *terraformer) createOrUpdateRole(ctx context.Context) error {
