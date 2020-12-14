@@ -105,7 +105,7 @@ var _ = Describe("terraformer", func() {
 		Describe("#CreateState", func() {
 			var (
 				expected                  *corev1.ConfigMap
-				stateConfigMapInitializer StateConfigMapInitializerFunc
+				stateConfigMapInitializer StateConfigMapInitializer
 			)
 
 			BeforeEach(func() {
@@ -115,7 +115,8 @@ var _ = Describe("terraformer", func() {
 						StateKey: "",
 					},
 				}
-				stateConfigMapInitializer = CreateState
+				stateConfigMapInitializer = CreateState{}
+
 			})
 
 			It("should create the ConfigMap", func() {
@@ -286,7 +287,7 @@ var _ = Describe("terraformer", func() {
 					variablesNotFound = apierrors.NewNotFound(secretGroupResource, variablesName)
 
 					runInitializer = func(ctx context.Context, initializeState bool) error {
-						return DefaultInitializer(c, main, variables, tfVars, StateConfigMapInitializerFunc(CreateState)).Initialize(ctx, &InitializerConfig{
+						return DefaultInitializer(c, main, variables, tfVars, CreateState{}).Initialize(ctx, &InitializerConfig{
 							Namespace:         namespace,
 							ConfigurationName: configurationName,
 							VariablesName:     variablesName,

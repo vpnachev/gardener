@@ -132,8 +132,8 @@ type StateConfigMapInitializer interface {
 	Initialize(ctx context.Context, c client.Client, namespace, name string) error
 }
 
-// StateConfigMapInitializerFunc implements StateConfigMapInitializer
-type StateConfigMapInitializerFunc func(ctx context.Context, c client.Client, namespace, name string) error
+// CreateState implements StateConfigMapInitializer.
+type CreateState struct{}
 
 // CreateOrUpdateState implements StateConfigMapInitializer.
 // It use it field state for creating or updating the state ConfigMap

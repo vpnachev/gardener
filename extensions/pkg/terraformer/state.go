@@ -163,14 +163,9 @@ func sniffJSONStateVersion(stateConfigMap []byte) (uint64, error) {
 	return *sniff.Version, nil
 }
 
-// Initialize implements StateConfigMapInitializer
-func (f StateConfigMapInitializerFunc) Initialize(ctx context.Context, c client.Client, namespace, name string) error {
-	return f(ctx, c, namespace, name)
-}
-
-// CreateState create terraform state config map and use empty state.
-// It does not create or update state ConfigMap if already exists.
-func CreateState(ctx context.Context, c client.Client, namespace, name string) error {
+// Initialize create terraform state config map and use empty state.
+// It does not create or update state ConfigMap if already exists,
+func (CreateState) Initialize(ctx context.Context, c client.Client, namespace, name string) error {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
 		Data: map[string]string{
