@@ -11,6 +11,7 @@ images:
 - name: gardener-seed-admission-controller
   sourceRepository: github.com/gardener/gardener
   repository: eu.gcr.io/gardener-project/gardener/seed-admission-controller
+  tag: "v1.18.0"
 
 # Seed bootstrap
 - name: pause-container
