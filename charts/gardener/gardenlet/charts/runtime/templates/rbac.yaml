@@ -1,25 +1,6 @@
 {{- if .Values.global.gardenlet.enabled }}
 # ClusterRole defines the required permissions for the gardenlet in the seed
 # For now, we provide escalation privileges required by gardener resoruce manager.
-# apiVersion: {{ include "rbacversion" . }}
-# kind: RoleBinding
-# metadata:
-#   name:  gardener.cloud:system:gardenlet
-#   labels:
-#     app: gardener
-#     role: gardenlet
-#     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-#     release: "{{ .Release.Name }}"
-#     heritage: "{{ .Release.Service }}"
-# roleRef:
-#   apiGroup: rbac.authorization.k8s.io
-#   kind: Role
-#   name: gardener.cloud:system:gardenlet
-#   namespace: garden
-# subjects:
-#   - kind: ServiceAccount
-#     name: "{{ required ".Values.global.gardenlet.serviceAccountName is required" .Values.global.gardenlet.serviceAccountName }}"
-#     namespace: garden
 ---
 apiVersion: {{ include "rbacversion" . }}
 kind: Role
@@ -422,14 +403,13 @@ subjects:
   name: "{{ required ".Values.global.gardenlet.serviceAccountName is required" .Values.global.gardenlet.serviceAccountName }}"
   namespace: garden
 
-{{- if .Values.global.gardenlet.config.featureGates }}
-{{- if .Values.global.gardenlet.config.featureGates.ManagedIstio }}
+### Istio releated rules. Required even when ManagedIstio/APIServerSNI are not enabled due to clean-up reconciliations.
 ---
 apiVersion: {{ include "rbacversion" . }}
 kind: Role
 metadata:
   name: gardener.cloud:managed-istio:gardenlet
-  namespace: istio-ingress
+  namespace: {{ .Values.global.gardenlet.config.SNI.Namespace }} #??? istio-ingress
   labels:
     gardener.cloud/role: gardenlet
     app: gardener
@@ -457,10 +437,10 @@ rules:
   - create
 ---
 apiVersion: {{ include "rbacversion" . }}
-kind: Role
+kind: RoleBinding
 metadata:
   name: gardener.cloud:managed-istio:gardenlet
-  namespace: istio-system
+  namespace: {{ .Values.global.gardenlet.config.SNI.Namespace }} #??? istio-ingress
   labels:
     gardener.cloud/role: gardenlet
     app: gardener
@@ -468,40 +448,14 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     release: "{{ .Release.Name }}"
     heritage: "{{ .Release.Service }}"
-rules:
-- apiGroups:
-  - networking.istio.io
-  resources:
-  - destinationrules
-  - sidecars
-  resourceNames:
-  - default
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - networking.istio.io
-  resources:
-  - sidecars
-  verbs:
-  - create
-- apiGroups:
-  - security.istio.io
-  resources:
-  - peerauthentications
-  resourceNames:
-  - default
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - security.istio.io
-  resources:
-  - peerauthentications
-  verbs:
-  - create
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gardener.cloud:managed-istio:gardenlet
+subjects:
+- kind: ServiceAccount
+  name: "{{ required ".Values.global.gardenlet.serviceAccountName is required" .Values.global.gardenlet.serviceAccountName }}"
+  namespace: garden
 ---
 apiVersion: {{ include "rbacversion" . }}
 kind: ClusterRole
@@ -571,10 +525,9 @@ rules:
   - create
 ---
 apiVersion: {{ include "rbacversion" . }}
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: gardener.cloud:managed-istio:gardenlet
-  namespace: istio-ingress
   labels:
     gardener.cloud/role: gardenlet
     app: gardener
@@ -584,12 +537,63 @@ metadata:
     heritage: "{{ .Release.Service }}"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: gardener.cloud:managed-istio:gardenlet
 subjects:
 - kind: ServiceAccount
   name: "{{ required ".Values.global.gardenlet.serviceAccountName is required" .Values.global.gardenlet.serviceAccountName }}"
   namespace: garden
+
+
+{{- if .Values.global.gardenlet.config.featureGates }}
+{{- if .Values.global.gardenlet.config.featureGates.ManagedIstio }}
+---
+apiVersion: {{ include "rbacversion" . }}
+kind: Role
+metadata:
+  name: gardener.cloud:managed-istio:gardenlet
+  namespace: istio-system
+  labels:
+    gardener.cloud/role: gardenlet
+    app: gardener
+    role: gardenlet
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: "{{ .Release.Name }}"
+    heritage: "{{ .Release.Service }}"
+rules:
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - destinationrules
+  - sidecars
+  resourceNames:
+  - default
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - sidecars
+  verbs:
+  - create
+- apiGroups:
+  - security.istio.io
+  resources:
+  - peerauthentications
+  resourceNames:
+  - default
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - security.istio.io
+  resources:
+  - peerauthentications
+  verbs:
+  - create
 ---
 apiVersion: {{ include "rbacversion" . }}
 kind: RoleBinding
@@ -606,26 +610,6 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: gardener.cloud:managed-istio:gardenlet
-subjects:
-- kind: ServiceAccount
-  name: "{{ required ".Values.global.gardenlet.serviceAccountName is required" .Values.global.gardenlet.serviceAccountName }}"
-  namespace: garden
----
-apiVersion: {{ include "rbacversion" . }}
-kind: ClusterRoleBinding
-metadata:
-  name: gardener.cloud:managed-istio:gardenlet
-  labels:
-    gardener.cloud/role: gardenlet
-    app: gardener
-    role: gardenlet
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
   name: gardener.cloud:managed-istio:gardenlet
 subjects:
 - kind: ServiceAccount

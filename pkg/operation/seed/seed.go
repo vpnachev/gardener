@@ -695,7 +695,7 @@ func BootstrapCluster(ctx context.Context, k8sGardenClient, k8sSeedClient kubern
 			return err
 		}
 	} else {
-		if err := proxy.Destroy(ctx); err != nil {
+		if err := proxy.Destroy(ctx); err != nil { // This require Permissions in `*conf.SNI.Ingress.Namespace` namespace even when SNI/ManagedIstio are disabled, hence we have to create this namespace if it does not exist as part of the bootstrap, otherwise the creation of Role and RoleBinding will fail
 			return err
 		}
 	}

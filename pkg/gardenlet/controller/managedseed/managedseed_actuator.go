@@ -44,6 +44,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	bootstraptokenapi "k8s.io/cluster-bootstrap/token/api"
 	bootstraptokenutil "k8s.io/cluster-bootstrap/token/util"
@@ -90,6 +91,12 @@ func (a *actuator) Reconcile(ctx context.Context, managedSeed *seedmanagementv1a
 	// Create or update garden namespace in the shoot
 	managedSeedLogger.Infof("Creating or updating garden namespace in shoot %s", kutil.ObjectName(shoot))
 	if err := a.createOrUpdateGardenNamespace(ctx, shootClient); err != nil {
+		return fmt.Errorf("could not create or update garden namespace in shoot %s: %w", kutil.ObjectName(shoot), err)
+	}
+
+	// Create sni ingress namespace if does not exist
+	managedSeedLogger.Infof("Creating sni ingress namespace in shoot %s", kutil.ObjectName(shoot))
+	if err := a.createSNIIngressNamespace(ctx, shootClient, managedSeed.Spec.Gardenlet.Config); err != nil {
 		return fmt.Errorf("could not create or update garden namespace in shoot %s: %w", kutil.ObjectName(shoot), err)
 	}
 
@@ -162,6 +169,24 @@ func (a *actuator) createOrUpdateGardenNamespace(ctx context.Context, shootClien
 	_, err := controllerutil.CreateOrUpdate(ctx, shootClient.Client(), gardenNamespace, func() error {
 		return nil
 	})
+	return err
+}
+
+func (a *actuator) createSNIIngressNamespace(ctx context.Context, shootClient kubernetes.Interface, config runtime.RawExtension) error {
+	gardenletConfig, err := helper.DecodeGardenletConfiguration(&config, false)
+	if err != nil {
+		return err
+	}
+	sniIngressNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: *gardenletConfig.SNI.Ingress.Namespace,
+		},
+	}
+
+	err = shootClient.DirectClient().Get(ctx, kutil.Key(sniIngressNamespace.Name), sniIngressNamespace)
+	if apierrors.IsNotFound(err) {
+		return shootClient.DirectClient().Create(ctx, sniIngressNamespace)
+	}
 	return err
 }
 
@@ -274,8 +299,20 @@ func (a *actuator) deployGardenlet(ctx context.Context, shootClient kubernetes.I
 	}
 
 	// Prepare gardenlet chart values
-	values, err := a.prepareGardenletChartValues(ctx, shootClient, managedSeed.Spec.Gardenlet.Deployment, gardenletConfig, managedSeed.Name,
-		v1alpha1helper.GetBootstrap(managedSeed.Spec.Gardenlet.Bootstrap), utils.IsTrue(managedSeed.Spec.Gardenlet.MergeWithParent), shoot)
+	values, err := a.prepareGardenletChartValues(
+		ctx,
+		shootClient,
+		managedSeed.Spec.Gardenlet.Deployment,
+		gardenletConfig,
+		managedSeed.Name,
+		v1alpha1helper.GetBootstrap(
+			managedSeed.Spec.Gardenlet.Bootstrap,
+		),
+		utils.IsTrue(
+			managedSeed.Spec.Gardenlet.MergeWithParent,
+		),
+		shoot,
+	)
 	if err != nil {
 		return err
 	}
@@ -480,7 +517,10 @@ func (a *actuator) prepareGardenletChartValues(
 	bootstrap seedmanagementv1alpha1.Bootstrap,
 	mergeWithParent bool,
 	shoot *gardencorev1beta1.Shoot,
-) (map[string]interface{}, error) {
+) (
+	map[string]interface{},
+	error,
+) {
 	var err error
 
 	// Merge gardenlet deployment with parent values
