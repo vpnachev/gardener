@@ -44,7 +44,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	bootstraptokenapi "k8s.io/cluster-bootstrap/token/api"
 	bootstraptokenutil "k8s.io/cluster-bootstrap/token/util"
@@ -91,12 +90,6 @@ func (a *actuator) Reconcile(ctx context.Context, managedSeed *seedmanagementv1a
 	// Create or update garden namespace in the shoot
 	managedSeedLogger.Infof("Creating or updating garden namespace in shoot %s", kutil.ObjectName(shoot))
 	if err := a.createOrUpdateGardenNamespace(ctx, shootClient); err != nil {
-		return fmt.Errorf("could not create or update garden namespace in shoot %s: %w", kutil.ObjectName(shoot), err)
-	}
-
-	// Create sni ingress namespace if does not exist
-	managedSeedLogger.Infof("Creating sni ingress namespace in shoot %s", kutil.ObjectName(shoot))
-	if err := a.createSNIIngressNamespace(ctx, shootClient, managedSeed.Spec.Gardenlet.Config); err != nil {
 		return fmt.Errorf("could not create or update garden namespace in shoot %s: %w", kutil.ObjectName(shoot), err)
 	}
 
@@ -172,22 +165,28 @@ func (a *actuator) createOrUpdateGardenNamespace(ctx context.Context, shootClien
 	return err
 }
 
-func (a *actuator) createSNIIngressNamespace(ctx context.Context, shootClient kubernetes.Interface, config runtime.RawExtension) error {
-	gardenletConfig, err := helper.DecodeGardenletConfiguration(&config, false)
-	if err != nil {
-		return err
-	}
+func (a *actuator) createSNIIngressNamespace(ctx context.Context, shootClient kubernetes.Interface, namespaceName string) error {
 	sniIngressNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: *gardenletConfig.SNI.Ingress.Namespace,
+			Name: namespaceName,
 		},
 	}
 
-	err = shootClient.DirectClient().Get(ctx, kutil.Key(sniIngressNamespace.Name), sniIngressNamespace)
+	err := shootClient.DirectClient().Get(ctx, kutil.Key(sniIngressNamespace.Name), sniIngressNamespace)
 	if apierrors.IsNotFound(err) {
 		return shootClient.DirectClient().Create(ctx, sniIngressNamespace)
 	}
 	return err
+}
+
+func (a *actuator) deleteSNIIngressNamespace(ctx context.Context, shootClient kubernetes.Interface, namespaceName string) error {
+	sniIngressNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespaceName,
+		},
+	}
+
+	return client.IgnoreNotFound(shootClient.Client().Delete(ctx, sniIngressNamespace))
 }
 
 func (a *actuator) ensureGardenNamespaceDeleted(ctx context.Context, shootClient kubernetes.Interface) error {
@@ -298,6 +297,11 @@ func (a *actuator) deployGardenlet(ctx context.Context, shootClient kubernetes.I
 		return err
 	}
 
+	// Create SNI ingress namespace if does not exist
+	if err := a.createSNIIngressNamespace(ctx, shootClient, *gardenletConfig.SNI.Ingress.Namespace); err != nil {
+		return fmt.Errorf("could not create SNI ingress namespace %s in shoot %s: %w", *gardenletConfig.SNI.Ingress.Namespace, kutil.ObjectName(shoot), err)
+	}
+
 	// Prepare gardenlet chart values
 	values, err := a.prepareGardenletChartValues(
 		ctx,
@@ -331,6 +335,10 @@ func (a *actuator) deleteGardenlet(ctx context.Context, shootClient kubernetes.I
 	// Ensure seed secrets are deleted
 	if err := a.ensureSeedSecretsDeleted(ctx, &gardenletConfig.SeedConfig.SeedTemplate.Spec, managedSeed); err != nil {
 		return err
+	}
+
+	if err := a.deleteSNIIngressNamespace(ctx, shootClient, *gardenletConfig.SNI.Ingress.Namespace); err != nil {
+		return fmt.Errorf("failed to delete SNI ingress namespace %s in shoot %s: %w", *gardenletConfig.SNI.Ingress.Namespace, kutil.ObjectName(shoot), err)
 	}
 
 	// Prepare gardenlet chart values
