@@ -227,6 +227,11 @@ var _ = Describe("Actuator", func() {
 							Spec: seed.Spec,
 						},
 					},
+					SNI: &configv1alpha1.SNI{
+						Ingress: &configv1alpha1.SNIIngress{
+							Namespace: pointer.StringPtr("istio-ingress"),
+						},
+					},
 				},
 			},
 			Bootstrap:       bootstrapPtr(seedmanagementv1alpha1.BootstrapToken),
