@@ -83,8 +83,9 @@ var _ = Describe("Actuator", func() {
 		kubeconfigSecret *corev1.Secret
 		seed             *gardencorev1beta1.Seed
 
-		seedTemplate *gardencorev1beta1.SeedTemplate
-		gardenlet    *seedmanagementv1alpha1.Gardenlet
+		seedTemplate    *gardencorev1beta1.SeedTemplate
+		gardenletConfig configv1alpha1.GardenletConfiguration
+		gardenlet       *seedmanagementv1alpha1.Gardenlet
 
 		mergedDeployment      *seedmanagementv1alpha1.GardenletDeployment
 		mergedGardenletConfig *configv1alpha1.GardenletConfiguration
@@ -203,6 +204,28 @@ var _ = Describe("Actuator", func() {
 			},
 			Spec: seed.Spec,
 		}
+
+		gardenletConfig = configv1alpha1.GardenletConfiguration{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: configv1alpha1.SchemeGroupVersion.String(),
+				Kind:       "GardenletConfiguration",
+			},
+			SeedConfig: &configv1alpha1.SeedConfig{
+				SeedTemplate: gardencorev1beta1.SeedTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels:      seed.Labels,
+						Annotations: seed.Annotations,
+					},
+					Spec: seed.Spec,
+				},
+			},
+			SNI: &configv1alpha1.SNI{
+				Ingress: &configv1alpha1.SNIIngress{
+					Namespace: pointer.StringPtr("istio-ingress"),
+				},
+			},
+		}
+
 		gardenlet = &seedmanagementv1alpha1.Gardenlet{
 			Deployment: &seedmanagementv1alpha1.GardenletDeployment{
 				ReplicaCount:         pointer.Int32Ptr(1),
@@ -213,26 +236,7 @@ var _ = Describe("Actuator", func() {
 				VPA: pointer.BoolPtr(true),
 			},
 			Config: runtime.RawExtension{
-				Object: &configv1alpha1.GardenletConfiguration{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: configv1alpha1.SchemeGroupVersion.String(),
-						Kind:       "GardenletConfiguration",
-					},
-					SeedConfig: &configv1alpha1.SeedConfig{
-						SeedTemplate: gardencorev1beta1.SeedTemplate{
-							ObjectMeta: metav1.ObjectMeta{
-								Labels:      seed.Labels,
-								Annotations: seed.Annotations,
-							},
-							Spec: seed.Spec,
-						},
-					},
-					SNI: &configv1alpha1.SNI{
-						Ingress: &configv1alpha1.SNIIngress{
-							Namespace: pointer.StringPtr("istio-ingress"),
-						},
-					},
-				},
+				Object: &gardenletConfig,
 			},
 			Bootstrap:       bootstrapPtr(seedmanagementv1alpha1.BootstrapToken),
 			MergeWithParent: pointer.BoolPtr(true),
@@ -272,6 +276,29 @@ var _ = Describe("Actuator", func() {
 					return apierrors.NewNotFound(corev1.Resource("namespace"), v1beta1constants.GardenNamespace)
 				},
 			)
+		}
+		expectCreateSNIIngressNamespace = func() {
+			shc.EXPECT().Get(ctx, kutil.Key(*gardenletConfig.SNI.Ingress.Namespace), gomock.AssignableToTypeOf(&corev1.Namespace{})).DoAndReturn(
+				func(_ context.Context, _ client.ObjectKey, _ *corev1.Namespace) error {
+					return apierrors.NewNotFound(corev1.Resource("namespace"), name)
+				},
+			)
+			shc.EXPECT().Create(ctx, gomock.AssignableToTypeOf(&corev1.Namespace{})).DoAndReturn(
+				func(_ context.Context, ns *corev1.Namespace) error {
+					Expect(ns.Name).To(Equal(*gardenletConfig.SNI.Ingress.Namespace))
+					return nil
+				},
+			)
+		}
+		expectEnsureSNIIngressDeleted = func() {
+			// Delete garden namespace
+			shc.EXPECT().Delete(ctx, gomock.AssignableToTypeOf(&corev1.Namespace{})).DoAndReturn(
+				func(_ context.Context, ns *corev1.Namespace) error {
+					Expect(ns.Name).To(Equal(*gardenletConfig.SNI.Ingress.Namespace))
+					return nil
+				},
+			)
+
 		}
 
 		expectCheckSeedSpec = func() {
@@ -554,6 +581,7 @@ var _ = Describe("Actuator", func() {
 				clientMap.EXPECT().GetClient(ctx, keys.ForSeedWithName(seedName)).Return(seedClient, nil)
 
 				expectCreateGardenNamespace()
+				expectCreateSNIIngressNamespace()
 				expectCheckSeedSpec()
 				expectCreateSeedSecrets()
 				expectCreateSeed()
@@ -573,6 +601,7 @@ var _ = Describe("Actuator", func() {
 				clientMap.EXPECT().GetClient(ctx, keys.ForSeedWithName(seedName)).Return(seedClient, nil)
 
 				expectCreateGardenNamespace()
+				expectCreateSNIIngressNamespace()
 				expectCheckSeedSpec()
 				expectCreateSeedSecrets()
 				expectMergeWithParent()
@@ -591,6 +620,7 @@ var _ = Describe("Actuator", func() {
 				clientMap.EXPECT().GetClient(ctx, keys.ForSeedWithName(seedName)).Return(seedClient, nil)
 
 				expectCreateGardenNamespace()
+				// expectCreateSNIIngressNamespace()
 				expectCheckSeedSpec()
 				expectCreateSeedSecrets()
 				expectMergeWithParent()
@@ -615,6 +645,7 @@ var _ = Describe("Actuator", func() {
 				expectEnsureSeedDeleted()
 				expectEnsureSeedSecretsDeleted()
 				expectEnsureGardenNamespaceDeleted()
+				expectEnsureSNIIngressDeleted()
 
 				err := actuator.Delete(ctx, managedSeed, shoot)
 				Expect(err).ToNot(HaveOccurred())
@@ -636,6 +667,7 @@ var _ = Describe("Actuator", func() {
 				expectGetGardenletChartValues(true)
 				expectDeleteGardenletChart()
 				expectEnsureGardenNamespaceDeleted()
+				expectEnsureSNIIngressDeleted()
 
 				err := actuator.Delete(ctx, managedSeed, shoot)
 				Expect(err).ToNot(HaveOccurred())

@@ -165,6 +165,7 @@ func (a *actuator) createOrUpdateGardenNamespace(ctx context.Context, shootClien
 	return err
 }
 
+// createSNIIngressNamespace creates the SNI Ingress namespace only if does not exist.
 func (a *actuator) createSNIIngressNamespace(ctx context.Context, shootClient kubernetes.Interface, namespaceName string) error {
 	sniIngressNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -172,9 +173,9 @@ func (a *actuator) createSNIIngressNamespace(ctx context.Context, shootClient ku
 		},
 	}
 
-	err := shootClient.DirectClient().Get(ctx, kutil.Key(sniIngressNamespace.Name), sniIngressNamespace)
+	err := shootClient.Client().Get(ctx, kutil.Key(sniIngressNamespace.Name), sniIngressNamespace)
 	if apierrors.IsNotFound(err) {
-		return shootClient.DirectClient().Create(ctx, sniIngressNamespace)
+		return shootClient.Client().Create(ctx, sniIngressNamespace)
 	}
 	return err
 }
@@ -281,28 +282,23 @@ func (a *actuator) ensureSeedDeleted(ctx context.Context, managedSeed *seedmanag
 }
 
 func (a *actuator) deployGardenlet(ctx context.Context, shootClient kubernetes.Interface, managedSeed *seedmanagementv1alpha1.ManagedSeed, shoot *gardencorev1beta1.Shoot) error {
-	// Decode gardenlet configuration
 	gardenletConfig, err := helper.DecodeGardenletConfiguration(&managedSeed.Spec.Gardenlet.Config, false)
 	if err != nil {
 		return err
 	}
 
-	// Check seed spec
 	if err := a.checkSeedSpec(ctx, &gardenletConfig.SeedConfig.SeedTemplate.Spec, shoot); err != nil {
 		return err
 	}
 
-	// Create or update seed secrets
 	if err := a.createOrUpdateSeedSecrets(ctx, &gardenletConfig.SeedConfig.SeedTemplate.Spec, managedSeed, shoot); err != nil {
 		return err
 	}
 
-	// Create SNI ingress namespace if does not exist
 	if err := a.createSNIIngressNamespace(ctx, shootClient, *gardenletConfig.SNI.Ingress.Namespace); err != nil {
 		return fmt.Errorf("could not create SNI ingress namespace %s in shoot %s: %w", *gardenletConfig.SNI.Ingress.Namespace, kutil.ObjectName(shoot), err)
 	}
 
-	// Prepare gardenlet chart values
 	values, err := a.prepareGardenletChartValues(
 		ctx,
 		shootClient,
@@ -321,18 +317,15 @@ func (a *actuator) deployGardenlet(ctx context.Context, shootClient kubernetes.I
 		return err
 	}
 
-	// Apply gardenlet chart
 	return shootClient.ChartApplier().Apply(ctx, filepath.Join(charts.Path, "gardener", "gardenlet"), v1beta1constants.GardenNamespace, "gardenlet", kubernetes.Values(values))
 }
 
 func (a *actuator) deleteGardenlet(ctx context.Context, shootClient kubernetes.Interface, managedSeed *seedmanagementv1alpha1.ManagedSeed, shoot *gardencorev1beta1.Shoot) error {
-	// Decode gardenlet configuration
 	gardenletConfig, err := helper.DecodeGardenletConfiguration(&managedSeed.Spec.Gardenlet.Config, false)
 	if err != nil {
 		return err
 	}
 
-	// Ensure seed secrets are deleted
 	if err := a.ensureSeedSecretsDeleted(ctx, &gardenletConfig.SeedConfig.SeedTemplate.Spec, managedSeed); err != nil {
 		return err
 	}
@@ -341,14 +334,12 @@ func (a *actuator) deleteGardenlet(ctx context.Context, shootClient kubernetes.I
 		return fmt.Errorf("failed to delete SNI ingress namespace %s in shoot %s: %w", *gardenletConfig.SNI.Ingress.Namespace, kutil.ObjectName(shoot), err)
 	}
 
-	// Prepare gardenlet chart values
 	values, err := a.prepareGardenletChartValues(ctx, shootClient, managedSeed.Spec.Gardenlet.Deployment, gardenletConfig, managedSeed.Name,
 		v1alpha1helper.GetBootstrap(managedSeed.Spec.Gardenlet.Bootstrap), utils.IsTrue(managedSeed.Spec.Gardenlet.MergeWithParent), shoot)
 	if err != nil {
 		return err
 	}
 
-	// Delete gardenlet chart
 	return shootClient.ChartApplier().Delete(ctx, filepath.Join(charts.Path, "gardener", "gardenlet"), v1beta1constants.GardenNamespace, "gardenlet", kubernetes.Values(values))
 }
 
@@ -525,10 +516,7 @@ func (a *actuator) prepareGardenletChartValues(
 	bootstrap seedmanagementv1alpha1.Bootstrap,
 	mergeWithParent bool,
 	shoot *gardencorev1beta1.Shoot,
-) (
-	map[string]interface{},
-	error,
-) {
+) (map[string]interface{}, error) {
 	var err error
 
 	// Merge gardenlet deployment with parent values
