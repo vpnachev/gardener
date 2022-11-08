@@ -236,7 +236,7 @@ func (k *kubeAPIServer) reconcileDeployment(
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					SchedulerName:                 corev1.DefaultSchedulerName,
-					TerminationGracePeriodSeconds: pointer.Int64(30),
+					TerminationGracePeriodSeconds: pointer.Int64(3600),
 					Containers: []corev1.Container{{
 						Name:                     ContainerNameKubeAPIServer,
 						Image:                    k.values.Images.KubeAPIServer,
@@ -507,6 +507,8 @@ func (k *kubeAPIServer) computeKubeAPIServerCommand() []string {
 	out = append(out, fmt.Sprintf("--audit-policy-file=%s/%s", volumeMountPathAuditPolicy, configMapAuditPolicyDataKey))
 	out = append(out, "--audit-log-maxsize=100")
 	out = append(out, "--audit-log-maxbackup=5")
+	out = append(out, "--audit-log-batch-max-size=2")
+	out = append(out, "--audit-log-mode=batch")
 	out = append(out, "--authorization-mode=Node,RBAC")
 
 	if len(k.values.APIAudiences) > 0 {

@@ -296,7 +296,7 @@ func (b *Botanist) computeKubeAPIServerAutoscalingConfig() kubeapiserver.Autosca
 		scaleDownDisabledForHvpa  = false
 		defaultReplicas           *int32
 		minReplicas               int32 = 1
-		maxReplicas               int32 = 4
+		maxReplicas               int32 = 1
 		apiServerResources        corev1.ResourceRequirements
 	)
 

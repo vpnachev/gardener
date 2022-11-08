@@ -11,6 +11,8 @@ spec:
   cloudProfileName: local
   secretBindingName: local # dummy, doesn't contain any credentials
   region: local
+  hibernation:
+    enabled: false
   networking:
     type: calico
     providerConfig:
@@ -32,9 +34,13 @@ spec:
       maxSurge: 1
       maxUnavailable: 0
   kubernetes:
-    version: 1.25.4
+    kubeAPIServer:
+      auditConfig:
+        auditPolicy:
+          configMapRef:
+            name: audit-everything
+    version: 1.24.7
     kubelet:
-      seccompDefault: true
       serializeImagePulls: false
       registryPullQPS: 10
       registryBurst: 20

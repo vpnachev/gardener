@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+data:
+  fibonacci.py: |
+    from random import random
+
+    def fibonacci(x, mem_usage):
+        mem_usage[hash(random())] = "azasdasd" * x
+        if x == 0:
+            return 0
+        if x == 1:
+            return 1
+        return fibonacci(x-1, mem_usage) + fibonacci(x-2, mem_usage)
+
+    if __name__ == "__main__":
+        counter = 0
+        while True:
+            print(counter)
+            counter += 1
+            d = dict()
+            fibonacci(35, d)
+kind: ConfigMap
+metadata:
+  name: fibonacci
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fibonacci
+  labels:
+    app: fibonacci
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: fibonacci
+  template:
+    metadata:
+      labels:
+        app: fibonacci
+    spec:
+      containers:
+      - name: fibonacci
+        image: python:3.9
+        command:
+        - python3
+        - /opt/fibonacci.py
+        volumeMounts:
+        - name: fibonacci
+          mountPath: /opt
+          readOnly: true
+      terminationGracePeriodSeconds: 35
+      volumes:
+      - name: fibonacci
+        configMap:
+          name: fibonacci
+      restartPolicy: Always

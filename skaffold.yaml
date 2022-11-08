@@ -1102,6 +1102,14 @@ deploy:
           - name: gardener-resource-manager
             repository: localhost:5001/eu_gcr_io_gardener-project_gardener_resource-manager
             tag: "{{.IMAGE_TAG7}}"
+          - name: kube-apiserver
+            repository: eu.gcr.io/gardener-project/3rd/kube-apiserver
+            tag: v1.24.0-cherry-pick-110094
+            targetVersion: 1.24.8
+          - name: hyperkube
+            repository: eu.gcr.io/sap-se-gcr-k8s-public/eu_gcr_io/gardener-project/hyperkube
+            tag: 1.24.7
+            targetVersion: 1.24.8
       imageStrategy:
         helm: {}
       valuesFiles:

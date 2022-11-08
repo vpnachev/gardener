@@ -9,13 +9,16 @@ spec:
   kubernetes:
     versions:
     - version: 1.25.4
+    - version: 1.25.0
     - version: 1.24.8
+    - version: 1.24.7
+    - version: 1.24.0
     - version: 1.23.6
     - version: 1.22.0
     - version: 1.21.0
     - version: 1.20.0
   # These values do not represent the actual machine capacity. The actual
-  # capacity of the machine depends on your docker resource allocation. 
+  # capacity of the machine depends on your docker resource allocation.
   machineTypes:
   - cpu: "1"
     gpu: "0"
