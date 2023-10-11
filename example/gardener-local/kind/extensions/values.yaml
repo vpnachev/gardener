@@ -5,3 +5,4 @@ gardener:
     deployed: false
   nginxIngress:
     deployed: false
+  # serviceAccountIssuer: ""

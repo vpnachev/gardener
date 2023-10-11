@@ -2,7 +2,7 @@
 - |
   kind: ClusterConfiguration
   apiServer:
-{{- if .Values.gardener.apiserverRelay.deployed }}  
+{{- if .Values.gardener.apiserverRelay.deployed }}
     certSANs:
       - localhost
       - 127.0.0.1
@@ -16,6 +16,10 @@
       authorization-webhook-config-file: /etc/gardener/controlplane/auth-webhook-kubeconfig-{{ if eq .Values.networking.ipFamily "dual" }}ipv4{{ else }}{{ .Values.networking.ipFamily }}{{ end }}.yaml
       authorization-webhook-cache-authorized-ttl: "0"
       authorization-webhook-cache-unauthorized-ttl: "0"
+{{- if .Values.gardener.serviceAccountIssuer }}
+      service-account-issuer: "https://{{ .Values.gardener.serviceAccountIssuer }}"
+      service-account-jwks-uri: "https://{{ .Values.gardener.serviceAccountIssuer }}/openid/v1/jwks"
+{{- end }}
     extraVolumes:
     - name: gardener
       hostPath: /etc/gardener/controlplane/auth-webhook-kubeconfig-{{ if eq .Values.networking.ipFamily "dual" }}ipv4{{ else }}{{ .Values.networking.ipFamily }}{{ end }}.yaml
