@@ -26,7 +26,6 @@ DEPLOY_REGISTRY=true
 MULTI_ZONAL=false
 CHART=$(dirname "$0")/../example/gardener-local/kind/cluster
 ADDITIONAL_ARGS=""
-SERVICE_ACCOUNT_ISSUER=""
 SUDO=""
 if [[ "$(id -u)" != "0" ]]; then
   SUDO="sudo "
@@ -191,7 +190,7 @@ if [[ "$IPFAMILY" == "ipv6" ]] && [[ "$MULTI_ZONAL" == "true" ]]; then
   ADDITIONAL_ARGS="$ADDITIONAL_ARGS --set gardener.seed.istio.listenAddresses={::1,::10,::11,::12}"
 fi
 
-if [[ -n "$SERVICE_ACCOUNT_ISSUER" ]]; then
+if [[ -n "${SERVICE_ACCOUNT_ISSUER:-""}" ]]; then
   ADDITIONAL_ARGS="$ADDITIONAL_ARGS --set gardener.serviceAccountIssuer=${SERVICE_ACCOUNT_ISSUER}"
 fi
 
