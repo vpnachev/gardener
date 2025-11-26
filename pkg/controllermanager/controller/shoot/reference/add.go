@@ -24,7 +24,8 @@ func AddToManager(mgr manager.Manager, cfg controllermanagerconfigv1alpha1.Shoot
 		GetNamespace:                func(obj client.Object) string { return obj.GetNamespace() },
 		GetReferencedSecretNames:    getReferencedSecretNames,
 		GetReferencedConfigMapNames: getReferencedConfigMapNames,
-		ReferenceChangedPredicate:   Predicate,
+		// GetReferencedWorkloadIdentityNames: TODO(vpnachev): implement when https://github.com/gardener/gardener/pull/13469 is merged
+		ReferenceChangedPredicate: Predicate,
 	}).AddToManager(mgr, "shoot")
 }
 
